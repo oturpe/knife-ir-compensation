@@ -119,7 +119,7 @@ void setVoltageReference(VoltageReference reference) {
 void initializeCurrentSense() {
   //setVoltageReference(VREF_INTERNAL_1_1V)
   //Testing with Vcc
-  setVoltageReference(VREF_VCC);
+  setVoltageReference(VREF_INTERNAL_1_1V);
 
   // Analog input: ADC0 (the default)
   //ADMUX |= BV(MUX0);
@@ -135,11 +135,6 @@ void initializeCurrentSense() {
   ADCSRA |= BV(ADEN);
 }
 
-/// Starts current sense ADC operation.
-void startCurrentSense() {
-  //PORTD |= BV(PORTD5); // debug
-}
-
 /// Reads values from current sense and return value with 8 bits
 /// precision.
 ///
@@ -147,7 +142,7 @@ void startCurrentSense() {
 ///
 /// \return
 ///   Value from adc
-uint8_t readCurrentSense() {
+uint16_t readCurrentSense() {
   // start conversion and wait until value is available
   ADCSRA |= BV(ADSC);
   while(ADCSRA & (1<<ADSC));
@@ -155,19 +150,79 @@ uint8_t readCurrentSense() {
   return ADC;
 }
 
-int main() {
-  initializePwm(PSV_64);
-  initializeCurrentSense();
 
-  //Debugging >>
-  DDRD |= BV(DDD5);
-  // << Debugging
+#define STORE_SIZE 500
+uint16_t Store[STORE_SIZE];
+uint16_t Cursor = 0;
+
+uint16_t averageCurrentValue(uint16_t value) {
+  static bool initialized = false;
+
+  // Fill with first input to avoid statup lag
+  if(!initialized) {
+    for (int i = 0; i < STORE_SIZE; i++) {
+      Store[i] = value;
+    }
+    initialized = true;
+    return value;
+  }
+
+  Store[Cursor] = value;
+  Cursor = (Cursor + 1) % STORE_SIZE;
+
+  uint16_t sum = 0;
+  for (int i = 0; i < STORE_SIZE; i++) {
+    sum += Store[i];
+  }
+
+  return sum / STORE_SIZE;
+
+}
+
+#ifdef DEBUG
+  /// Initializes resources needed for debugging.
+  void initializeDebug() {
+    // Pin D5 as output.
+    DDRD |= BV(DDD5);
+  }
+
+  /// Prints debug information
+  ///
+  /// This crude implementation flashes a led connected to pin D5. This is only
+  /// done every DEBUG_FREQ calls to avoid spending all the time flashing the
+  /// led.
+  ///
+  /// \param averagedCurrent
+  ///     Averaged current value at this moment
+  void printDebugInfo(uint16_t averagedCurrent) {
+    static uint16_t counter = 0;
+
+    counter = (counter + 1) % DEBUG_FREQ;
+    if(counter)
+      return;
+
+    for(int i = 0; i <= averagedCurrent / 2; i++) {
+      PORTD |= BV(PORTD5);
+      _delay_ms(50);
+      PORTD &= ~BV(PORTD5);
+      _delay_ms(50);
+    }
+  }
+#endif
+
+int main() {
+  initializePwm(PSV_8);
+  initializeCurrentSense();
+  setPwm(128);
 
   //Warmup delay just in case
   _delay_ms(50);
   while(true) {
-    uint8_t current = readCurrentSense();
-    setPwm(current);
-    _delay_ms(500);
+    uint16_t current = readCurrentSense();
+    uint16_t averaged = averageCurrentValue(current);
+
+    #ifdef DEBUG
+      printDebugInfo(averaged);
+    #endif
   }
 }
