@@ -10,6 +10,10 @@
 // Author: Otto Urpelainen
 // Email: oturpe@iki.fi
 
+// TODOS:
+// #  Find the right pwm frequency. At least too high frequency seems to make motor
+//    to stall.
+
 #include "config.h"
 
 #include <avr/io.h>
