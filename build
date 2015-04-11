@@ -1,0 +1,19 @@
+projectName=test
+
+avr-gcc -Os -mmcu=atmega328p -o ${projectName}.out ${projectName}.cpp
+if [ $? -ne 0 ]; then
+  echo "Build failed"
+  exit 0
+fi
+
+avr-objcopy -j .text -j .data -O ihex ${projectName}.out ${projectName}.hex
+if [ -$? -ne 0 ]; then
+  echo "Hex file generation failed"
+  exit 0
+fi
+
+sudo avrdude -c arduinoisp -p atmega328p -U flash:w:${projectName}.hex
+if [ $? -ne 0 ]; then
+  echo "Upload failed"
+  exit 0
+fi
