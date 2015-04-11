@@ -22,7 +22,7 @@
 // Cleaner setting of bits
 #define BV(x) (1<<x)
 
-/// Allowable prescaler values for timer 0.
+/// Possible prescaler values for timer 0.
 enum PrescalerValue {
   PSV_1,
   PSV_8,
@@ -31,7 +31,9 @@ enum PrescalerValue {
   PSV_1024,
 };
 
-/// Sets timer 0 prescaler to requested value
+/// Sets timer 0 prescaler to requested value.
+///
+/// This function assumes that Clock Select bits have not been touched yet.
 ///
 /// \param value
 ///   Requested prescaler value
@@ -79,12 +81,93 @@ void initializePwm(PrescalerValue prescalerValue) {
 /// \param value
 ///    Requested pwm duty cycle
 void setPwm(uint8_t value) {
-    OCR0A = value;
+  OCR0A = value;
+}
+
+// Possible voltage references
+enum VoltageReference {
+  // Aref pin
+  VREF_AREF,
+  // Vcc with external capacitor
+  VREF_VCC,
+  // Internal 1.1 V with external capacitor
+  VREF_INTERNAL_1_1V
+};
+
+// Sets analog voltage refernece to requested type.
+//
+// This function assumes that Reference Selection bits have not been touched
+// yet.
+//
+// \param reference
+//    Requested voltage reference
+void setVoltageReference(VoltageReference reference) {
+  switch(reference) {
+  case VREF_AREF:
+    // The default, nothing to do
+    break;
+  case VREF_VCC:
+    ADMUX |= BV(REFS0);
+    break;
+  case VREF_INTERNAL_1_1V:
+    ADMUX |= BV(REFS1) | BV(REFS0);
+    break;
+  }
+}
+
+/// Initializes current sense adc by setting the reference voltage to 1.1 V
+void initializeCurrentSense() {
+  //setVoltageReference(VREF_INTERNAL_1_1V)
+  //Testing with Vcc
+  setVoltageReference(VREF_VCC);
+
+  // Analog input: ADC0 (the default)
+  //ADMUX |= BV(MUX0);
+
+  // Prescale: /256
+  ADCSRA |= BV(ADPS2) | BV(ADPS1) | BV(ADPS0);
+
+  // Use analog input ADC0 with digital input disabled
+  //ADMUX |= 0; // ADC0: all MUXn bits 0;
+  DIDR0 |= BV(ADC0D);
+
+  // Enable adc
+  ADCSRA |= BV(ADEN);
+}
+
+/// Starts current sense ADC operation.
+void startCurrentSense() {
+  //PORTD |= BV(PORTD5); // debug
+}
+
+/// Reads values from current sense and return value with 8 bits
+/// precision.
+///
+/// This function waits until a value is available.
+///
+/// \return
+///   Value from adc
+uint8_t readCurrentSense() {
+  // start conversion and wait until value is available
+  ADCSRA |= BV(ADSC);
+  while(ADCSRA & (1<<ADSC));
+
+  return ADC;
 }
 
 int main() {
   initializePwm(PSV_64);
-  setPwm(64);
+  initializeCurrentSense();
+
+  //Debugging >>
+  DDRD |= BV(DDD5);
+  // << Debugging
+
+  //Warmup delay just in case
+  _delay_ms(50);
   while(true) {
+    uint8_t current = readCurrentSense();
+    setPwm(current);
+    _delay_ms(500);
   }
 }
