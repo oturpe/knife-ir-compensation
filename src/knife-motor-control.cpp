@@ -61,7 +61,10 @@ void setPrescaler(PrescalerValue value) {
 ///
 /// \param prescalerValue
 ///    Requested prescaler value
-void initializePwm(PrescalerValue prescalerValue) {
+///
+/// \param pwmValue
+///    Initial value for pwm
+void initializePwm(PrescalerValue prescalerValue, uint8_t pwmValue) {
   // Set PD6 as output
   DDRD |= BV(DDD6);
   PORTD |= BV(PORTD6);
@@ -74,12 +77,13 @@ void initializePwm(PrescalerValue prescalerValue) {
   TCCR0A |= BV(WGM00);
 
   setPrescaler(prescalerValue);
+  OCR0A = pwmValue;
 }
 
-/// Sets pwm to requested duty cycle. 0 is off and 255 is 100 %.
+/// Sets pwm duty cycle to requested value.
 ///
 /// \param value
-///    Requested pwm duty cycle
+///    Requested duty cycle value
 void setPwm(uint8_t value) {
   OCR0A = value;
 }
@@ -150,12 +154,10 @@ uint16_t readCurrentSense() {
   return ADC;
 }
 
-
-#define STORE_SIZE 500
 uint16_t Store[STORE_SIZE];
 uint16_t Cursor = 0;
 
-uint16_t averageCurrentValue(uint16_t value) {
+uint32_t averageCurrentValue(uint16_t value) {
   static bool initialized = false;
 
   // Fill with first input to avoid statup lag
@@ -170,7 +172,7 @@ uint16_t averageCurrentValue(uint16_t value) {
   Store[Cursor] = value;
   Cursor = (Cursor + 1) % STORE_SIZE;
 
-  uint16_t sum = 0;
+  uint32_t sum = 0;
   for (int i = 0; i < STORE_SIZE; i++) {
     sum += Store[i];
   }
@@ -179,7 +181,33 @@ uint16_t averageCurrentValue(uint16_t value) {
 
 }
 
+void control(uint32_t averaged) {
+    static int32_t integral = 0;
+    static uint16_t counter = 0;
+
+    counter = (counter +1) % CONTROL_FREQ;
+    if(counter)
+      return;
+
+    int32_t delta = averaged - TARGET_CURRENT;
+    if(delta > DELTA_MAX) delta = DELTA_MAX;
+    if(delta < DELTA_MIN) delta = DELTA_MIN;
+
+    integral += delta;
+    if(integral > INTEGRAL_MAX) integral = INTEGRAL_MAX;
+    if(integral < INTEGRAL_MIN) integral = INTEGRAL_MIN;
+
+    int32_t pwmValue = ((delta / DELTA_COEFF) + (integral / INTEGRAL_COEFF));
+    if(pwmValue > 127)
+      pwmValue = 127;
+    if(pwmValue < -128)
+      pwmValue = -128;
+
+    setPwm(128-pwmValue);
+}
+
 #ifdef DEBUG
+
   /// Initializes resources needed for debugging.
   void initializeDebug() {
     // Pin D5 as output.
@@ -201,7 +229,7 @@ uint16_t averageCurrentValue(uint16_t value) {
     if(counter)
       return;
 
-    for(int i = 0; i <= averagedCurrent / 2; i++) {
+    for(int i = 0; i < averagedCurrent / 2; i++) {
       PORTD |= BV(PORTD5);
       _delay_ms(50);
       PORTD &= ~BV(PORTD5);
@@ -211,15 +239,16 @@ uint16_t averageCurrentValue(uint16_t value) {
 #endif
 
 int main() {
-  initializePwm(PSV_8);
+  initializePwm(PSV_8, PWM_INITIAL);
   initializeCurrentSense();
-  setPwm(128);
 
   //Warmup delay just in case
   _delay_ms(50);
   while(true) {
-    uint16_t current = readCurrentSense();
-    uint16_t averaged = averageCurrentValue(current);
+    uint32_t current = readCurrentSense();
+    uint32_t averaged = averageCurrentValue(current);
+
+    control(averaged);
 
     #ifdef DEBUG
       printDebugInfo(averaged);
