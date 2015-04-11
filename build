@@ -1,4 +1,4 @@
-projectName=test
+projectName=knife-motor-control
 
 avr-gcc -Os -mmcu=atmega328p -o ${projectName}.out ${projectName}.cpp
 if [ $? -ne 0 ]; then
