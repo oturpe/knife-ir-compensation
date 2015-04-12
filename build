@@ -1,4 +1,4 @@
-projectName=knife-motor-control
+projectName=ir-compensation
 sourceDir=src
 targetDir=target
 

@@ -4,15 +4,15 @@
 // a kinetic sculpture to be presented in the Slovenian Pavilion of Venice
 // Biennale 2015.
 //
-// This is a simple ir controller that attempts to archieve slow rotational
-// speed and high torque.
+// This is a simple load current controller that attempts to retain constant
+// current through the motor.
 //
 // Author: Otto Urpelainen
 // Email: oturpe@iki.fi
 
 // TODOS:
-// #  Find the right pwm frequency. At least too high frequency seems to make motor
-//    to stall.
+// #  Find the right pwm frequency. At least too high frequency seems to make
+//    motor to stall.
 
 #include "config.h"
 
